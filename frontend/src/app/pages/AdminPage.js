@@ -62,7 +62,7 @@ export default function AdminPage() {
                 <div style="padding-top: 15px;">
                     <input id="swal-name" style="${commonStyle}" placeholder="ชื่อแพ็กเกจสมาชิก" value="${item?.name || ''}">
                     <input id="swal-price" type="number" style="${commonStyle}" placeholder="ราคา (บาท)" value="${item?.price || ''}">
-                    <input id="swal-duration" type="number" style="${commonStyle}" placeholder="ระยะเวลาคุ้มครอง (เดือน)" value="${item?.durationMonths || ''}">
+                    <input id="swal-duration" type="number" style="${commonStyle}" placeholder="ระยะเวลาแพ็คเกจ (วัน)" value="${item?.durationMonths || ''}">
                     <textarea id="swal-desc" style="${textareaStyle}" placeholder="ดีเทลหรือคำอธิบายแพ็กเกจ">${item?.description || ''}</textarea>
                 </div>
             `;
