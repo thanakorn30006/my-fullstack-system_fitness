@@ -1,17 +1,21 @@
-/* Global styles removed as requested */
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;600;700&display=swap');
+
+* {
+    font-family: 'Prompt', sans-serif !important;
+    box-sizing: border-box;
+}
+
 body {
-    font-family: sans-serif;
     margin: 0;
     padding: 0;
+    background-color: #fafafa;
 }
-table {
-    width: 100%;
-    border-collapse: collapse;
+
+/* บังคับฟอนต์ให้ Pop-up ด้วย */
+.swal2-container, .swal2-popup, .swal2-title, .swal2-content, .swal2-confirm, .swal2-cancel {
+    font-family: 'Prompt', sans-serif !important;
 }
-th, td {
-    padding: 8px;
-    text-align: left;
-}
+
 button {
     cursor: pointer;
 }

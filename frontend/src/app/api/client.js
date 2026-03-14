@@ -84,14 +84,17 @@ export const classesAPI = {
 
 // ======================== Packages API ========================
 export const packagesAPI = {
-    getAll: () => apiClient.get('/packages'),                 // เฉพาะ active packages
-    getAllAdmin: () => apiClient.get('/packages/all'),         // Admin only (ทุก package)
-    getMyActive: () => apiClient.get('/packages/my-active'),    // package ปัจจุบันของ user
-    getHistory: () => apiClient.get('/packages/history'),      // ประวัติการซื้อทั้งหมด
-    create: (data) => apiClient.post('/packages', data),       // Admin only
+    getAll: () => apiClient.get('/packages'),                  // เฉพาะ active packages
+    getAllAdmin: () => apiClient.get('/packages/all'),          // Admin only (ทุก package)
+    getMyActive: () => apiClient.get('/packages/my-active'),     // package ปัจจุบันของ user
+    getHistory: () => apiClient.get('/packages/history'),        // ประวัติการซื้อทั้งหมด
+    create: (data) => apiClient.post('/packages', data),        // Admin only
     update: (id, data) => apiClient.put(`/packages/${id}`, data), // Admin only
     subscribe: (packageId) => apiClient.post('/packages/subscribe', { packageId }),
-    delete: (id) => apiClient.delete(`/packages/${id}`),      // Admin only
+    delete: (id) => apiClient.delete(`/packages/${id}`),       // Admin only
+    
+    // --- เพิ่มบรรทัดนี้ลงไปครับ ---
+    cancelActive: () => apiClient.delete('/packages/cancel-active'), 
 };
 
 // ======================== Trainers API ========================

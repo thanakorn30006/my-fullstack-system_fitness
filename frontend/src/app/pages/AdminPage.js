@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { classesAPI, packagesAPI, trainersAPI } from '../api/client';
 import { useAuth } from '../AuthContext';
+import Swal from 'sweetalert2';
 
 export default function AdminPage() {
     const { user } = useAuth();
@@ -8,350 +9,222 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('classes');
 
-    useEffect(() => {
-        if (user?.u_role === 'ADMIN') {
-            fetchData();
-        }
+    useEffect(() => { 
+        if (user?.u_role === 'ADMIN') fetchData(); 
     }, [user]);
 
     const fetchData = async () => {
+        setLoading(true);
         try {
             const [cRes, pRes, tRes] = await Promise.all([
-                classesAPI.getAll(),
-                packagesAPI.getAllAdmin(),
+                classesAPI.getAll(), 
+                packagesAPI.getAllAdmin(), 
                 trainersAPI.getAll()
             ]);
-            setData({
-                classes: cRes.data,
-                packages: pRes.data,
-                trainers: tRes.data
+            setData({ 
+                classes: cRes.data || [], 
+                packages: pRes.data || [], 
+                trainers: tRes.data || [] 
             });
-        } catch (error) {
-            console.error('Failed to load admin data', error);
-        } finally {
-            setLoading(false);
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
         }
     };
 
-    if (user?.u_role !== 'ADMIN') return <div style={{ padding: '20px' }}>Access Denied</div>;
-    if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+    // --- 🎨 Template สำหรับ Modal (สวย สม่ำเสมอ และสมมาตร) ---
+    const handleOpenModal = (type, item = null) => {
+        const isEdit = !!item;
+        let title = isEdit ? `แก้ไข${type}` : `เพิ่ม${type}ใหม่`;
+        
+        // สไตล์กลางสำหรับ Input/Select ใน SweetAlert เพื่อความ Consistency
+        const commonStyle = `width: 85%; margin: 12px auto; display: block; padding: 14px; border-radius: 12px; border: 1px solid #e0e0e0; font-family: 'Prompt', sans-serif; outline: none; box-sizing: border-box; font-size: 15px; background: #fafafa;`;
+        const textareaStyle = `${commonStyle} height: 120px; resize: none;`;
 
-    // Fixed sidebar below Navbar
-    const sidebarStyle = {
-        width: '200px',
-        borderRight: '1px solid #ddd',
-        height: 'calc(100vh - 61px)', // Height minus Navbar
-        padding: '20px',
-        position: 'fixed',
-        left: 0,
-        top: '61px', // Start below Navbar
-        backgroundColor: '#f8f9fa',
-        zIndex: 10
+        let html = '';
+        if (type === 'คลาสเรียน') {
+            html = `
+                <div style="padding-top: 15px;">
+                    <input id="swal-name" style="${commonStyle}" placeholder="ชื่อคลาสเรียน" value="${item?.c_name || item?.name || ''}">
+                    <input id="swal-cap" type="number" style="${commonStyle}" placeholder="ความจุ (จำนวนที่นั่ง)" value="${item?.c_capacity || item?.capacity || ''}">
+                    <input id="swal-date" type="datetime-local" style="${commonStyle}" value="${item?.c_schedule || item?.schedule ? new Date(item.c_schedule || item.schedule).toLocaleString('sv-SE').slice(0, 16) : ''}">
+                    <select id="swal-trainer" style="${commonStyle}">
+                        <option value="">-- เลือกเทรนเนอร์ --</option>
+                        ${data.trainers.map(t => `
+                            <option value="${t.tr_id || t.id}" ${ (item?.tr_id || item?.trainerId) == (t.tr_id || t.id) ? 'selected' : ''}>${t.tr_name || t.name}</option>
+                        `).join('')}
+                    </select>
+                </div>
+            `;
+        } else if (type === 'แพ็กเกจ') {
+            html = `
+                <div style="padding-top: 15px;">
+                    <input id="swal-name" style="${commonStyle}" placeholder="ชื่อแพ็กเกจสมาชิก" value="${item?.name || ''}">
+                    <input id="swal-price" type="number" style="${commonStyle}" placeholder="ราคา (บาท)" value="${item?.price || ''}">
+                    <input id="swal-duration" type="number" style="${commonStyle}" placeholder="ระยะเวลาคุ้มครอง (เดือน)" value="${item?.durationMonths || ''}">
+                    <textarea id="swal-desc" style="${textareaStyle}" placeholder="ดีเทลหรือคำอธิบายแพ็กเกจ">${item?.description || ''}</textarea>
+                </div>
+            `;
+        } else if (type === 'เทรนเนอร์') {
+            html = `
+                <div style="padding-top: 15px;">
+                    <input id="swal-name" style="${commonStyle}" placeholder="ชื่อ-นามสกุล เทรนเนอร์" value="${item?.tr_name || item?.name || ''}">
+                    <input id="swal-special" style="${commonStyle}" placeholder="ความเชี่ยวชาญพิเศษ (เช่น Boxing, Yoga)" value="${item?.tr_specialty || item?.specialty || ''}">
+                    <textarea id="swal-bio" style="${textareaStyle}" placeholder="ประวัติการทำงานหรือคำแนะนำตัว">${item?.tr_bio || item?.bio || ''}</textarea>
+                </div>
+            `;
+        }
+
+        Swal.fire({
+            title: `<span style="font-family: 'Prompt'; font-weight: 800; font-size: 24px;">${title}</span>`,
+            html: html,
+            showCancelButton: true,
+            confirmButtonText: 'บันทึกข้อมูล',
+            confirmButtonColor: '#ff6b00',
+            cancelButtonText: 'ยกเลิก',
+            cancelButtonColor: '#aaa',
+            borderRadius: '25px',
+            focusConfirm: false,
+            preConfirm: () => {
+                const values = { name: document.getElementById('swal-name').value };
+                if (type === 'คลาสเรียน') {
+                    values.capacity = document.getElementById('swal-cap').value;
+                    values.schedule = document.getElementById('swal-date').value;
+                    values.trainerId = document.getElementById('swal-trainer').value;
+                } else if (type === 'แพ็กเกจ') {
+                    values.price = document.getElementById('swal-price').value;
+                    values.duration = document.getElementById('swal-duration').value;
+                    values.description = document.getElementById('swal-desc').value;
+                } else if (type === 'เทรนเนอร์') {
+                    values.specialty = document.getElementById('swal-special').value;
+                    values.bio = document.getElementById('swal-bio').value;
+                }
+                if (!values.name) return Swal.showValidationMessage('กรุณากรอกข้อมูลให้ครบถ้วน');
+                return values;
+            }
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    const id = item?.id || item?.c_id || item?.tr_id;
+                    if (type === 'คลาสเรียน') {
+                        isEdit ? await classesAPI.update(id, result.value) : await classesAPI.create(result.value);
+                    } else if (type === 'แพ็กเกจ') {
+                        isEdit ? await packagesAPI.update(id, result.value) : await packagesAPI.create(result.value);
+                    } else if (type === 'เทรนเนอร์') {
+                        isEdit ? await trainersAPI.update(id, result.value) : await trainersAPI.create(result.value);
+                    }
+                    Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', timer: 1200, showConfirmButton: false, borderRadius: '20px' });
+                    fetchData();
+                } catch (e) {
+                    Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่สามารถส่งข้อมูลไปที่เซิร์ฟเวอร์ได้' });
+                }
+            }
+        });
     };
 
-    const contentStyle = {
-        marginLeft: '280px', // Shifted further right
-        padding: '30px 60px 30px 30px', 
-        marginTop: '20px',
-        width: 'auto',
-        flexGrow: 1
+    const handleDelete = (type, id) => {
+        Swal.fire({
+            title: 'ต้องการลบข้อมูลนี้?',
+            text: "ข้อมูลจะถูกลบถาวรและไม่สามารถกู้คืนได้",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ff4d4f',
+            confirmButtonText: 'ยืนยันการลบ',
+            cancelButtonText: 'ยกเลิก',
+            borderRadius: '20px'
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                try {
+                    if (type === 'classes') await classesAPI.delete(id);
+                    if (type === 'packages') await packagesAPI.delete(id);
+                    if (type === 'trainers') await trainersAPI.delete(id);
+                    fetchData();
+                    Swal.fire({ icon:'success', title:'ลบเรียบร้อย', timer:1000, showConfirmButton:false });
+                } catch (e) { Swal.fire('ผิดพลาด', 'ไม่สามารถลบรายการนี้ได้', 'error'); }
+            }
+        });
     };
 
-    const navBtnStyle = (tab) => ({
-        display: 'block',
-        width: '100%',
-        padding: '10px',
-        marginBottom: '10px',
-        textAlign: 'left',
-        cursor: 'pointer',
-        backgroundColor: activeTab === tab ? '#eee' : 'white',
-        border: '1px solid #ccc',
-        fontWeight: activeTab === tab ? 'bold' : 'normal'
-    });
+    if (user?.u_role !== 'ADMIN') return <div style={{textAlign:'center', padding:'100px', fontFamily:'Prompt'}}>🚫 Access Denied</div>;
+    if (loading) return <div style={{textAlign:'center', padding:'100px', fontFamily:'Prompt'}}>กำลังเชื่อมต่อฐานข้อมูล...</div>;
+
+    const styles = {
+        sidebarBtn: (active) => ({
+            width:'100%', padding:'18px 30px', textAlign:'left', color:'#fff', 
+            border:'none', outline:'none', cursor:'pointer',
+            background: active ? '#ff6b00' : 'transparent', 
+            fontWeight: active ? 'bold' : 'normal', transition:'0.3s'
+        }),
+        actionBtn: (color) => ({
+            color: color, fontWeight:'bold', background:'none', border:'none', 
+            outline: 'none', cursor:'pointer', marginLeft:'15px', fontSize:'14px'
+        }),
+        addBtn: {
+            padding:'12px 25px', background:'#111', color:'#fff', 
+            border:'none', outline: 'none', borderRadius:'12px', 
+            fontWeight:'bold', cursor:'pointer', transition:'0.2s'
+        }
+    };
 
     return (
-        <div style={{ display: 'flex' }}>
-            {/* Simple Sidebar */}
-            <div style={sidebarStyle}>
-                <h3 style={{ marginTop: 0 }}>เมนูจัดการ</h3>
-                <button style={navBtnStyle('classes')} onClick={() => setActiveTab('classes')}>จัดการคลาส</button>
-                <button style={navBtnStyle('packages')} onClick={() => setActiveTab('packages')}>จัดการแพ็กเกจ</button>
-                <button style={navBtnStyle('trainers')} onClick={() => setActiveTab('trainers')}>จัดการเทรนเนอร์</button>
+        <div style={{display:'flex', minHeight:'calc(100vh - 70px)', fontFamily:'Prompt'}}>
+            {/* Sidebar */}
+            <div style={{width:'280px', background:'#111', color:'#fff'}}>
+                <div style={{padding:'40px 30px', borderBottom:'1px solid #222'}}>
+                    <h3 style={{margin:0, color:'#ff6b00', letterSpacing:'1.5px', fontSize:'20px'}}>ADMIN PANEL</h3>
+                </div>
+                <button onClick={() => setActiveTab('classes')} style={styles.sidebarBtn(activeTab === 'classes')}>🏋️ จัดการคลาสเรียน</button>
+                <button onClick={() => setActiveTab('packages')} style={styles.sidebarBtn(activeTab === 'packages')}>💳 จัดการแพ็กเกจ</button>
+                <button onClick={() => setActiveTab('trainers')} style={styles.sidebarBtn(activeTab === 'trainers')}>👤 จัดการเทรนเนอร์</button>
             </div>
 
-            {/* Content Area */}
-            <div style={contentStyle}>
-                <h1 style={{ marginTop: 0 }}>ระบบจัดการหลังบ้าน (Admin)</h1>
-                <hr />
-                {activeTab === 'classes' && <ClassesManager classes={data.classes} trainers={data.trainers} onRefresh={fetchData} />}
-                {activeTab === 'packages' && <PackagesManager packages={data.packages} onRefresh={fetchData} />}
-                {activeTab === 'trainers' && <TrainersManager trainers={data.trainers} onRefresh={fetchData} />}
+            {/* Main Content Area */}
+            <div style={{flexGrow:1, padding:'50px', background:'#f8f9fa'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'40px'}}>
+                    <h2 style={{margin:0, fontWeight:'900', fontSize:'32px', color:'#111'}}>จัดการ{activeTab === 'classes' ? 'คลาสเรียน' : activeTab === 'packages' ? 'แพ็กเกจ' : 'เทรนเนอร์'}</h2>
+                    <button onClick={() => handleOpenModal(activeTab === 'classes' ? 'คลาสเรียน' : activeTab === 'packages' ? 'แพ็กเกจ' : 'เทรนเนอร์')} style={styles.addBtn} onMouseOver={(e) => e.target.style.background='#333'} onMouseOut={(e) => e.target.style.background='#111'}>
+                        + เพิ่มข้อมูลใหม่
+                    </button>
+                </div>
+
+                <div style={{background:'#fff', padding:'35px', borderRadius:'30px', boxShadow:'0 15px 45px rgba(0,0,0,0.04)'}}>
+                    <table style={{width:'100%', borderCollapse:'collapse'}}>
+                        <thead>
+                            <tr style={{textAlign:'left', color:'#aaa', borderBottom:'2px solid #f5f5f5', fontSize:'14px', textTransform:'uppercase', letterSpacing:'1px'}}>
+                                <th style={{padding:'15px 20px'}}>ชื่อรายการ</th>
+                                {activeTab === 'classes' && <th style={{padding:'15px 20px'}}>เทรนเนอร์ผู้สอน</th>}
+                                {activeTab === 'packages' && <th style={{padding:'15px 20px'}}>ราคาค่าบริการ</th>}
+                                <th style={{padding:'15px 20px', textAlign:'right'}}>จัดการข้อมูล</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {data[activeTab].map(item => (
+                                <tr key={item.id || item.c_id || item.tr_id} style={{borderBottom:'1px solid #fcfcfc'}} onMouseOver={(e) => e.currentTarget.style.background='#fbfbfb'} onMouseOut={(e) => e.currentTarget.style.background='transparent'}>
+                                    <td style={{padding:'20px', fontWeight:'700', color:'#333'}}>{item.c_name || item.name || item.tr_name}</td>
+                                    
+                                    {/* ✅ FIXED: ชื่อ Trainer ขึ้นแน่นอน โดยการเปรียบเทียบทั้ง ID และ trainerId */}
+                                    {activeTab === 'classes' && (
+                                        <td style={{padding:'20px', color:'#666'}}>
+                                            {(() => {
+                                                const trainer = data.trainers.find(t => (t.tr_id || t.id) == (item.tr_id || item.trainerId));
+                                                return trainer ? (trainer.tr_name || trainer.name) : <span style={{color:'#ccc'}}>ยังไม่ระบุ</span>;
+                                            })()}
+                                        </td>
+                                    )}
+                                    
+                                    {activeTab === 'packages' && <td style={{padding:'20px', color:'#ff6b00', fontWeight:'bold', fontSize:'16px'}}>{parseFloat(item.price).toLocaleString()} ฿</td>}
+                                    
+                                    <td style={{padding:'20px', textAlign:'right'}}>
+                                        <button onClick={() => handleOpenModal(activeTab === 'classes' ? 'คลาสเรียน' : activeTab === 'packages' ? 'แพ็กเกจ' : 'เทรนเนอร์', item)} style={styles.actionBtn('#047481')}>แก้ไข</button>
+                                        <button onClick={() => handleDelete(activeTab, item.id || item.c_id || item.tr_id)} style={styles.actionBtn('#ff4d4f')}>ลบ</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
-    );
-}
-
-function ClassesManager({ classes, trainers, onRefresh }) {
-    const [form, setForm] = useState({ name: '', capacity: 20, schedule: '', description: '', trainerId: '' });
-    const [editingId, setEditingId] = useState(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            if (editingId) {
-                await classesAPI.update(editingId, form);
-                alert('แก้ไขสำเร็จ');
-            } else {
-                await classesAPI.create(form);
-                alert('บันทึกสำเร็จ');
-            }
-            onRefresh();
-            resetForm();
-        } catch (err) { alert(err.response?.data?.error || 'Error'); }
-    };
-
-    const resetForm = () => {
-        setForm({ name: '', capacity: 20, schedule: '', description: '', trainerId: '' });
-        setEditingId(null);
-    };
-
-    const handleEdit = (c) => {
-        setEditingId(c.id);
-        // Format date for datetime-local input
-        const date = new Date(c.schedule);
-        const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        setForm({
-            name: c.name,
-            capacity: c.capacity,
-            schedule: localDate,
-            description: c.description || '',
-            trainerId: c.trainerId || ''
-        });
-    };
-
-    return (
-        <div>
-            <h2>จัดการคลาส</h2>
-            <form onSubmit={handleSubmit} style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ccc', backgroundColor: '#fff' }}>
-                <h3 style={{ marginTop: 0 }}>{editingId ? 'แก้ไขข้อมูลคลาส' : 'เพิ่มคลาสใหม่'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                    <div>
-                        <label>ชื่อคลาส:</label><br />
-                        <input style={{ width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                    </div>
-                    <div>
-                        <label>ความจุ:</label><br />
-                        <input style={{ width: '100%' }} type="number" value={form.capacity} onChange={e => setForm({ ...form, capacity: e.target.value })} required />
-                    </div>
-                    <div>
-                        <label>เวลา:</label><br />
-                        <input style={{ width: '100%' }} type="datetime-local" value={form.schedule} onChange={e => setForm({ ...form, schedule: e.target.value })} required />
-                    </div>
-                    <div>
-                        <label>เทรนเนอร์:</label><br />
-                        <select style={{ width: '100%' }} value={form.trainerId} onChange={e => setForm({ ...form, trainerId: e.target.value })} required>
-                            <option value="">เลือกเทรนเนอร์</option>
-                            {trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                    </div>
-                </div>
-                <div style={{ marginTop: '20px' }}>
-                    <button type="submit">{editingId ? 'บันทึกการแก้ไข' : 'ตกลง'}</button>
-                    {editingId && <button type="button" onClick={resetForm} style={{ marginLeft: '10px' }}>ยกเลิก</button>}
-                </div>
-            </form>
-
-            <table border="1" style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
-                <thead>
-                    <tr style={{ backgroundColor: '#f2f2f2', textAlign: 'left' }}>
-                        <th style={{ padding: '10px' }}>คลาส</th>
-                        <th style={{ padding: '10px' }}>เวลา</th>
-                        <th style={{ padding: '10px' }}>จองแล้ว/ความจุ</th>
-                        <th style={{ padding: '10px' }}>สถานะ</th>
-                        <th style={{ padding: '10px' }}>จัดการ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {classes.map(c => (
-                        <tr key={c.id}>
-                            <td style={{ padding: '10px' }}>{c.name}</td>
-                            <td style={{ padding: '10px' }}>{new Date(c.schedule).toLocaleString()}</td>
-                            <td style={{ padding: '10px' }}>{c._count?.bookings || 0}/{c.capacity}</td>
-                            <td style={{ padding: '10px' }}>{c.isActive ? 'เปิด' : 'ปิด'}</td>
-                            <td style={{ padding: '10px' }}>
-                                <button onClick={() => handleEdit(c)}>แก้ไข</button>
-                                <button onClick={() => classesAPI.toggle(c.id).then(onRefresh)} style={{ marginLeft: '5px' }}>สลับสถานะ</button>
-                                <button onClick={() => window.confirm('ลบ?') && classesAPI.delete(c.id).then(onRefresh)} style={{ marginLeft: '5px' }}>ลบ</button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-}
-
-function PackagesManager({ packages, onRefresh }) {
-    const [form, setForm] = useState({ name: '', price: '', duration: 30, description: '' });
-    const [editingId, setEditingId] = useState(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            if (editingId) {
-                await packagesAPI.update(editingId, form);
-                alert('แก้ไขสำเร็จ');
-            } else {
-                await packagesAPI.create(form);
-                alert('สมัครสำเร็จ');
-            }
-            onRefresh();
-            resetForm();
-        } catch (err) { alert(err.response?.data?.error || 'Error'); }
-    };
-
-    const resetForm = () => {
-        setForm({ name: '', price: '', duration: 30, description: '' });
-        setEditingId(null);
-    };
-
-    const handleEdit = (p) => {
-        setEditingId(p.id);
-        setForm({
-            name: p.name,
-            price: p.price,
-            duration: p.duration,
-            description: p.description || ''
-        });
-    };
-
-    return (
-        <div>
-            <h2>จัดการแพ็กเกจ</h2>
-            <form onSubmit={handleSubmit} style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ccc', backgroundColor: '#fff' }}>
-                <h3 style={{ marginTop: 0 }}>{editingId ? 'แก้ไขข้อมูลแพ็กเกจ' : 'เพิ่มแพ็กเกจ'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                    <div>
-                        <label>ชื่อ:</label><br />
-                        <input style={{ width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                    </div>
-                    <div>
-                        <label>ราคา:</label><br />
-                        <input style={{ width: '100%' }} type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} required />
-                    </div>
-                    <div>
-                        <label>วัน:</label><br />
-                        <input style={{ width: '100%' }} type="number" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} required />
-                    </div>
-                </div>
-                <div style={{ marginTop: '20px' }}>
-                    <button type="submit">{editingId ? 'บันทึกการแก้ไข' : 'ตกลง'}</button>
-                    {editingId && <button type="button" onClick={resetForm} style={{ marginLeft: '10px' }}>ยกเลิก</button>}
-                </div>
-            </form>
-
-            <table border="1" style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
-                <thead>
-                    <tr style={{ backgroundColor: '#f2f2f2', textAlign: 'left' }}>
-                        <th style={{ padding: '10px' }}>ชื่อแพ็กเกจ</th>
-                        <th style={{ padding: '10px' }}>ราคา (บาท)</th>
-                        <th style={{ padding: '10px' }}>ระยะเวลา (วัน)</th>
-                        <th style={{ padding: '10px' }}>จัดการ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {packages.map(p => (
-                        <tr key={p.id}>
-                            <td style={{ padding: '10px' }}>{p.name}</td>
-                            <td style={{ padding: '10px' }}>{p.price.toLocaleString()}</td>
-                            <td style={{ padding: '10px' }}>{p.duration}</td>
-                            <td style={{ padding: '10px' }}>
-                                <button onClick={() => handleEdit(p)}>แก้ไข</button>
-                                <button onClick={() => window.confirm('ลบ?') && packagesAPI.delete(p.id).then(onRefresh)} style={{ marginLeft: '5px', color: 'red' }}>ลบแพ็กเกจ</button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-}
-
-function TrainersManager({ trainers, onRefresh }) {
-    const [form, setForm] = useState({ name: '', specialty: '', bio: '' });
-    const [editingId, setEditingId] = useState(null);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            if (editingId) {
-                await trainersAPI.update(editingId, form);
-                alert('แก้ไขสำเร็จ');
-            } else {
-                await trainersAPI.create(form);
-                alert('สำเร็จ');
-            }
-            onRefresh();
-            resetForm();
-        } catch (err) { alert(err.response?.data?.error || 'Error'); }
-    };
-
-    const resetForm = () => {
-        setForm({ name: '', specialty: '', bio: '' });
-        setEditingId(null);
-    };
-
-    const handleEdit = (t) => {
-        setEditingId(t.id);
-        setForm({
-            name: t.name,
-            specialty: t.specialty,
-            bio: t.bio || ''
-        });
-    };
-
-    return (
-        <div>
-            <h2>จัดการเทรนเนอร์</h2>
-            <form onSubmit={handleSubmit} style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ccc', backgroundColor: '#fff' }}>
-                <h3 style={{ marginTop: 0 }}>{editingId ? 'แก้ไขข้อมูลเทรนเนอร์' : 'เพิ่มเทรนเนอร์'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                    <div>
-                        <label>ชื่อ:</label><br />
-                        <input style={{ width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                    </div>
-                    <div>
-                        <label>งาน:</label><br />
-                        <input style={{ width: '100%' }} value={form.specialty} onChange={e => setForm({ ...form, specialty: e.target.value })} required />
-                    </div>
-                </div>
-                <div style={{ marginTop: '20px' }}>
-                    <button type="submit">{editingId ? 'บันทึกการแก้ไข' : 'ตกลง'}</button>
-                    {editingId && <button type="button" onClick={resetForm} style={{ marginLeft: '10px' }}>ยกเลิก</button>}
-                </div>
-            </form>
-
-            <table border="1" style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
-                <thead>
-                    <tr style={{ backgroundColor: '#f2f2f2', textAlign: 'left' }}>
-                        <th style={{ padding: '10px' }}>ชื่อ-นามสกุล</th>
-                        <th style={{ padding: '10px' }}>ความเชี่ยวชาญ</th>
-                        <th style={{ padding: '10px' }}>จัดการ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {trainers.map(t => (
-                        <tr key={t.id}>
-                            <td style={{ padding: '10px' }}>{t.name}</td>
-                            <td style={{ padding: '10px' }}>{t.specialty}</td>
-                            <td style={{ padding: '10px' }}>
-                                <button onClick={() => handleEdit(t)}>แก้ไข</button>
-                                <button onClick={() => window.confirm('ลบ?') && trainersAPI.delete(t.id).then(onRefresh)} style={{ marginLeft: '5px', color: 'red' }}>ลบข้อมูล</button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
         </div>
     );
 }

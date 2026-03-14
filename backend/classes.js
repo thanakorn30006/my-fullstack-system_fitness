@@ -15,7 +15,7 @@ router.get('/', (req, res) => {
             c.c_schedule AS schedule, 
             c.c_capacity AS capacity, 
             c.c_isActive AS isActive, 
-            c.tr_id AS trainerId, 
+            c.tr_id AS tr_id,
             c.c_createdAt AS createdAt,
             (SELECT COUNT(*) FROM booking b WHERE b.c_id = c.c_id) as _count_bookings,
             t.tr_id AS t_id, 
