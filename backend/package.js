@@ -3,7 +3,9 @@ const router = express.Router();
 const db = require('./db');
 const { authenticateToken, requireAdmin } = require('./auth');
 
-// 1. Get active packages
+// ==========================================
+// 1. Get active packages (สำหรับหน้าเลือกซื้อของ User)
+// ==========================================
 router.get('/', (req, res) => {
     const sql = `
         SELECT pkg_id AS id, pkg_name AS name, pkg_price AS price, pkg_duration AS duration, 
@@ -16,7 +18,9 @@ router.get('/', (req, res) => {
     });
 });
 
-// 2. Admin get all packages
+// ==========================================
+// 2. Admin get all packages (สำหรับตารางในหน้า Admin)
+// ==========================================
 router.get('/all', authenticateToken, requireAdmin, (req, res) => {
     const query = `
         SELECT 
@@ -40,12 +44,17 @@ router.get('/all', authenticateToken, requireAdmin, (req, res) => {
     });
 });
 
+// ==========================================
 // 3. Admin create package
+// ==========================================
 router.post('/', authenticateToken, requireAdmin, (req, res) => {
     const { name, price, duration, description } = req.body;
     const insertSql = `INSERT INTO package (pkg_name, pkg_price, pkg_duration, pkg_description, pkg_isActive) VALUES (?, ?, ?, ?, ?)`;
     db.query(insertSql, [name, parseFloat(price), parseInt(duration), description || null, true], (err, result) => {
-        if (err) return res.status(500).json({ error: 'Something went wrong' });
+        if (err) {
+            console.error("CREATE ERROR:", err);
+            return res.status(500).json({ error: 'Something went wrong' });
+        }
         const selectSql = `SELECT pkg_id AS id, pkg_name AS name, pkg_price AS price, pkg_duration AS duration FROM package WHERE pkg_id = ?`;
         db.query(selectSql, [result.insertId], (err, rows) => {
             return res.json(rows[0]);
@@ -53,7 +62,61 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
     });
 });
 
-// 4. Subscribe to package (จุดที่แก้ไข: ลบ mp_name, mp_price ออกจาก Insert)
+// ==========================================
+// 4. Admin update package (แก้ไข ID ป้องกันเลขเบิ้ล)
+// ==========================================
+router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
+    // 🛡️ ป้องกันบัค ID เช่น "1:1" โดยการใช้ parseInt
+    const pkgId = parseInt(req.params.id.toString().replace(':', '')); 
+    const { name, price, duration, description } = req.body;
+
+    if (isNaN(pkgId)) return res.status(400).json({ error: 'Invalid ID format' });
+
+    const sql = `
+        UPDATE package 
+        SET pkg_name = ?, pkg_price = ?, pkg_duration = ?, pkg_description = ? 
+        WHERE pkg_id = ?
+    `;
+    db.query(sql, [name, parseFloat(price), parseInt(duration), description || null, pkgId], (err, result) => {
+        if (err) {
+            console.error("UPDATE ERROR:", err);
+            return res.status(500).json({ error: 'Update failed' });
+        }
+        return res.json({ message: 'Updated successfully' });
+    });
+});
+
+// ==========================================
+// 5. Admin delete package (แก้ไข ID และเพิ่ม Log)
+// ==========================================
+router.delete('/:id', authenticateToken, requireAdmin, (req, res) => {
+    // 🛡️ ล้างค่า ID ให้เป็นตัวเลขล้วนๆ ป้องกันบัคจาก Frontend
+    const pkgId = parseInt(req.params.id.toString().replace(':', ''));
+
+    if (isNaN(pkgId)) {
+        return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    const sql = 'DELETE FROM package WHERE pkg_id = ?';
+    db.query(sql, [pkgId], (err, result) => {
+        if (err) {
+            // พ่น Error ออกมาดูใน Terminal ว่าพังเพราะอะไร
+            console.error("❌ DELETE DB ERROR:", err.message); 
+            return res.status(500).json({ error: 'ไม่สามารถลบรายการนี้ได้ (Database Error)' });
+        }
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'ไม่พบรายการที่ต้องการลบ' });
+        }
+
+        console.log(`✅ Deleted package ID: ${pkgId}`);
+        return res.json({ message: 'Deleted successfully' });
+    });
+});
+
+// ==========================================
+// 6. Subscribe to package
+// ==========================================
 router.post('/subscribe', authenticateToken, (req, res) => {
     const { packageId } = req.body;
     const userId = parseInt(req.user.u_id);
@@ -65,18 +128,17 @@ router.post('/subscribe', authenticateToken, (req, res) => {
 
         const checkActiveSql = 'SELECT mp_id FROM memberpackage WHERE u_id = ? AND mp_endDate >= NOW() LIMIT 1';
         db.query(checkActiveSql, [userId], (err, activePackages) => {
+            if (err) return res.status(500).json({ error: 'DB error' });
             if (activePackages.length > 0) return res.status(400).json({ error: 'คุณยังมีแพ็กเกจที่ยังไม่หมดอายุ' });
 
             const startDate = new Date();
             const endDate = new Date();
             endDate.setDate(endDate.getDate() + pkg.duration);
 
-            // แก้ไข: INSERT เฉพาะคอลัมน์ที่มีในตารางจริง
             const insertSql = `INSERT INTO memberpackage (u_id, pkg_id, mp_startDate, mp_endDate) VALUES (?, ?, ?, ?)`;
             db.query(insertSql, [userId, pkg.id, startDate, endDate], (err, result) => {
                 if (err) return res.status(500).json({ error: 'Insert error' });
                 
-                // แก้ไข: ใช้ JOIN เพื่อดึงชื่อแพ็กเกจกลับไปแสดงผล
                 const selectSql = `
                     SELECT mp.mp_id AS id, p.pkg_name AS name, mp.mp_startDate AS startDate, mp.mp_endDate AS endDate 
                     FROM memberpackage mp
@@ -91,7 +153,9 @@ router.post('/subscribe', authenticateToken, (req, res) => {
     });
 });
 
-// 6. Get my active package (อันนี้ที่คุณแก้มา ถูกแล้วครับ)
+// ==========================================
+// 7. Get my active package
+// ==========================================
 router.get('/my-active', authenticateToken, (req, res) => {
     const userId = parseInt(req.user.u_id);
     const sql = `
@@ -108,7 +172,9 @@ router.get('/my-active', authenticateToken, (req, res) => {
     });
 });
 
-// 7. Get subscription history (จุดที่แก้ไข: เพิ่ม JOIN และลบคอลัมน์ที่ไม่มีออก)
+// ==========================================
+// 8. Get subscription history
+// ==========================================
 router.get('/history', authenticateToken, (req, res) => {
     const userId = parseInt(req.user.u_id);
     const sql = `
@@ -125,7 +191,9 @@ router.get('/history', authenticateToken, (req, res) => {
     });
 });
 
-// 8. ยกเลิกแพ็กเกจปัจจุบัน
+// ==========================================
+// 9. ยกเลิกแพ็กเกจปัจจุบัน
+// ==========================================
 router.delete('/cancel-active', authenticateToken, (req, res) => {
     const userId = parseInt(req.user.u_id);
     const sql = 'DELETE FROM memberpackage WHERE u_id = ? AND mp_endDate >= NOW()';
